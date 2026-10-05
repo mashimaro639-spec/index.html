@@ -1405,7 +1405,7 @@ syncStateFromInputs();
     const url=new URL('https://mashimaro639-spec.github.io/index.html/Battle-Score-Gyro-3.html');
     url.searchParams.set('room',roomCode);
     url.searchParams.set('back',location.href.split('?')[0]);
-    window.location.href=url.toString();
+    window.open(url.toString(),'_blank','noopener,noreferrer');
   }
     function completeRole(r){refreshSoundButtons();$m('syncOverlay').classList.remove('open');if(r==='host'||r==='clone'){closeArena();return}if(r==='player'){openArena(false)}else if(r==='viewer'){openArena(true)}else if(r==='gyro'){openGyroRoom();}}
 
