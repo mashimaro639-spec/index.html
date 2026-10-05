@@ -1401,8 +1401,8 @@ syncStateFromInputs();
   }
   function leaveSync(){stopSyncHeartbeat();syncConnections.forEach(c=>{try{c.close()}catch(e){}});syncConnections.clear();if(hostConn){try{hostConn.close()}catch(e){}}hostConn=null;if(peer){try{peer.destroy()}catch(e){}}peer=null;isHost=false;roomCode='';role='none';renderDevices();}
   function openGyroRoom(){
-    if(!hostConn?.open)return;
-    const url=new URL('battle-score-gyro.html',location.href);
+    if(!roomCode||(!isHost&&!hostConn?.open))return;
+    const url=new URL('https://mashimaro639-spec.github.io/index.html/Battle-Score-Gyro-3.html');
     url.searchParams.set('room',roomCode);
     url.searchParams.set('back',location.href.split('?')[0]);
     window.location.href=url.toString();
@@ -1471,7 +1471,7 @@ syncStateFromInputs();
   $m('syncPlayerRoleBtn').onclick=()=>{selectSyncRole('syncPlayerPanel')};
   $m('syncViewerRoleBtn').onclick=()=>{selectSyncRole('syncViewerPanel')};
   $m('syncCloneRoleBtn').onclick=()=>{selectSyncRole('syncClonePanel')};
-  $m('syncGyroRoleBtn').onclick=()=>{selectSyncRole('syncGyroPanel')};
+  $m('syncGyroRoleBtn').onclick=()=>openGyroRoom();
   $m('syncGyroJoinBtn').onclick=()=>connectAsClient($m('syncGyroInput').value,'gyro');
   $m('syncGyroDone').onclick=()=>{if(hostConn?.open)completeRole('gyro')};
   $m('syncGyroLeaveBtn').onclick=()=>{leaveSync();$m('syncGyroStatus').textContent='已離開房間'};
