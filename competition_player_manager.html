@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Competition Player Manager — 現場報名</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;background:radial-gradient(circle at 12% 0%,#1c2941 0,#0b0f16 38%);color:#eef3f8;min-height:100vh}
@@ -81,6 +82,11 @@ th{color:#93a1b4;font-size:12px}
 .modal-backdrop{display:none;position:fixed;inset:0;background:#02050bcc;backdrop-filter:blur(5px);z-index:20}
 .modal-open .modal-backdrop{display:block}
 .modal-close{float:right;background:#202b3b;padding:6px 10px}
+.detail-backdrop{position:fixed;inset:0;z-index:30;background:#02050bd9;backdrop-filter:blur(5px);display:grid;place-items:center;padding:16px}
+.detail-backdrop.hidden{display:none}
+.detail-card{width:min(460px,100%);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#151f30,#101722);border:1px solid #2a3a52;border-radius:18px;padding:22px;box-shadow:0 18px 45px #0008}
+.detail-photo{width:104px;height:104px;border-radius:16px;object-fit:cover;background:#263244;display:block;margin:12px auto 18px}
+.detail-fields{display:grid;gap:10px}.detail-field{background:#0d141f;border:1px solid #253246;border-radius:10px;padding:10px 12px;overflow-wrap:anywhere}.detail-field b{display:block;font-size:11px;color:#91a0b3;margin-bottom:4px}.detail-field span{white-space:pre-wrap}
 .bracket.horizontal{flex-direction:row}
 .bracket.vertical{flex-direction:column-reverse;align-items:center;min-width:0;width:100%;gap:18px}
 .bracket.vertical .round{width:min(100%,520px)}
@@ -91,6 +97,23 @@ th{color:#93a1b4;font-size:12px}
 .court-setting input{width:64px;padding:7px 8px}
 .court-style{width:auto;padding:7px 9px;font-size:12px}
 .court-label{grid-column:1/-1;background:#263b5a;border:1px solid #45658f;border-radius:7px;color:#c9dcff;text-align:center;font-size:12px;font-weight:700;padding:5px 8px;letter-spacing:.05em}
+
+/* 賽事連線 */
+.hub-card{border:1px solid #29384d;border-radius:14px;background:#0d141f;margin:0 0 14px;padding:12px 14px}
+.hub-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hub-head b{font-size:15px}
+.hub-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;background:#202b3b;color:#9aa8bb}
+.hub-badge.on{background:#12351f;color:#7ee2a0}.hub-badge.warn{background:#3a2e12;color:#ffd166}
+.hub-code{font-size:22px;font-weight:800;letter-spacing:.18em;color:#ffd166;font-variant-numeric:tabular-nums}
+.hub-head .grow{flex:1}
+.hub-note{font-size:12px;line-height:1.6;color:#8e9daf;margin:8px 0 0}
+.hub-courts{display:grid;gap:8px;margin-top:10px}
+.hub-court{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0b111b;border:1px solid #253246;border-radius:10px;padding:8px 10px;font-size:13px}
+.hub-court .cn{font-weight:800;min-width:46px;color:#9fc4ff}
+.hub-court .rc{font-weight:800;letter-spacing:.12em;color:#ffd166}
+.hub-court .st{color:#aab6c5;flex:1;min-width:140px}
+.hub-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#556;margin-right:6px}
+.hub-dot.on{background:#38d27a;box-shadow:0 0 8px #38d27a99}
 @media(max-width:850px){.grid{grid-template-columns:1fr}.app{padding:20px 14px 40px}.topbar{display:block}.topbar .primary{margin-top:16px}.bracket.horizontal{gap:12px}.round{width:180px}}
 @media(max-width:600px){
   body{overflow-x:hidden;background:linear-gradient(180deg,#101a2a 0,#0b0f16 38%);-webkit-tap-highlight-color:transparent}
@@ -114,17 +137,94 @@ th{color:#93a1b4;font-size:12px}
   .modal-open .form-card{width:calc(100vw - 24px);max-height:calc(100vh - 28px);padding:18px}
   input,textarea,select{font-size:16px}
 }
+
+/* UI refinement: clearer hierarchy, fewer competing controls */
+.grid{display:block}
+.topbar{align-items:center;margin-bottom:20px}
+.topbar h1{font-size:clamp(25px,3vw,34px)}
+.topbar .primary{padding:12px 18px;font-weight:700;white-space:nowrap}
+.nav{gap:6px;margin-bottom:16px}
+.nav button{font-weight:650}
+.section-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}
+.section-heading h2{font-size:21px;margin:0 0 5px;letter-spacing:-.02em}
+.section-heading p{font-size:13px;line-height:1.5;color:#91a0b3;margin:0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.stat{min-width:0;padding:13px 16px}
+.stat b{font-size:23px;line-height:1.25;margin-bottom:3px}
+.roster-toolbar{align-items:center;margin-bottom:10px}
+.roster-toolbar .search{flex:1 1 260px}
+.roster-toolbar button{white-space:nowrap}
+.data-tools{border:1px solid #29384d;border-radius:12px;background:#0d141f;margin:8px 0 18px;overflow:hidden}
+.data-tools summary{cursor:pointer;list-style:none;padding:12px 14px;color:#aab6c5;font-size:13px;font-weight:650;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.data-tools summary::-webkit-details-marker{display:none}
+.data-tools summary:after{content:"＋";color:#8ea4c2;font-size:17px}
+.data-tools[open] summary:after{content:"−"}
+.data-tool-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 14px 12px}
+.data-tool-actions button{font-size:12px;padding:9px 11px}
+.data-tools .note{margin:0;padding:0 14px 12px}
+.tablewrap{border:1px solid #263449;border-radius:12px}
+table{min-width:740px}
+th{background:#101827;white-space:nowrap}
+td{font-size:13px}
+tbody tr:hover{background:#ffffff05}
+td .row{gap:5px;flex-wrap:nowrap}
+td .row button{padding:7px 8px;font-size:12px;white-space:nowrap}
+.empty{display:flex;flex-direction:column;align-items:center;gap:7px;padding:42px 16px}
+.empty strong{font-size:15px;color:#b7c4d5}
+.empty span{font-size:13px}
+.bracket-heading{margin-bottom:16px}
+.bracket-actions{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.bracket-actions>#drawBtn{font-weight:700;padding:12px 16px}
+.bracket-settings{flex:1 1 240px;margin:0;max-width:100%}
+.bracket-settings .data-tool-actions{padding-top:2px}
+.settings-row{align-items:center}
+.court-setting{font-size:12px;white-space:nowrap}
+.court-setting input{width:72px}
+.style-setting{display:flex;gap:8px;align-items:center}
+.style-setting select{width:auto;min-width:120px}
+.bracket-info{background:#0d141f;border:1px solid #253246;border-radius:12px;padding:12px 14px;line-height:1.65}
+.bracket-toolbar{display:flex}
+@media(max-width:850px){.topbar{display:flex;align-items:flex-start}.topbar .primary{margin-top:0}.grid{display:block}}
+@media(max-width:600px){
+  .topbar{display:flex;align-items:center;gap:10px}
+  .topbar h1{font-size:22px;line-height:1.25}
+  .topbar .primary{width:auto;flex:0 0 auto;margin-top:0;padding:10px 12px;font-size:13px}
+  .topbar .sub{max-width:240px}
+  .nav button{font-size:13px;padding:11px 6px}
+  .section-heading{align-items:flex-start;gap:8px}
+  .section-heading h2{font-size:19px}
+  .section-heading p{font-size:12px}
+  .stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .stat{padding:10px 8px;border-radius:11px}
+  .stat b{font-size:19px;overflow-wrap:anywhere}
+  .stat span{font-size:10px;line-height:1.35}
+  .roster-toolbar{display:grid;grid-template-columns:1fr 1fr}
+  .roster-toolbar .search{grid-column:1/-1;min-width:0;width:100%}
+  .roster-toolbar button{font-size:12px}
+  .data-tools summary{padding:11px 12px}
+  .data-tool-actions{padding:0 12px 12px}
+  .data-tool-actions button{flex:1 1 auto}
+  .tablewrap{border-radius:10px}
+  .bracket-heading{align-items:flex-start}
+  .bracket-actions{display:grid;grid-template-columns:1fr;width:100%}
+  .bracket-actions>#drawBtn{width:100%}
+  .bracket-settings{width:100%}
+  .settings-row{align-items:stretch}
+  .settings-row .court-setting{flex:1 1 100%;justify-content:space-between}
+  .style-setting select{flex:1;min-width:0}
+  .bracket-info{font-size:12px;padding:10px 12px}
+}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="topbar">
-    <div><div class="eyebrow">COMPETITION CONTROL</div><h1>選手與淘汰賽管理</h1><div class="sub">集中管理報名資料，清楚掌握每一場晉級結果。</div></div>
+    <div><div class="eyebrow">COMPETITION CONTROL</div><h1>選手與淘汰賽管理</h1><div class="sub">先管理選手，再選擇本次參賽名單，最後建立淘汰賽。</div></div>
     <button class="primary" id="openFormBtn">＋ 新增選手</button>
   </div>
   <div class="nav" role="tablist">
-    <button class="active" data-view="playersView">選手名單</button>
-    <button data-view="bracketView">淘汰賽對戰</button>
+    <button class="active" data-view="playersView">① 選手管理</button>
+    <button data-view="bracketView">② 賽程對戰</button>
   </div>
 
   <section id="playersView" class="view active">
@@ -181,27 +281,40 @@ th{color:#93a1b4;font-size:12px}
     </section>
 
     <section class="card">
+      <div class="section-heading">
+        <div><h2>選手名單</h2><p>勾選「參賽」欄位，決定哪些選手加入本次抽籤。</p></div>
+        <span class="badge" id="rosterStatus">準備報名</span>
+      </div>
       <div class="stats">
-        <div class="stat"><b id="count">0</b><span>目前選手</span></div>
-        <div class="stat"><b id="selected">—</b><span>目前選取</span></div>
+        <div class="stat"><b id="count">0</b><span>全部選手</span></div>
+        <div class="stat"><b id="entrantCount">0</b><span>本次參賽</span></div>
+        <div class="stat"><b id="selected">—</b><span>計分器選取</span></div>
       </div>
 
-      <div class="toolbar">
-        <input class="search" id="search" placeholder="搜尋姓名／暱稱／編號">
-        <button class="secondary" id="exportBtn">匯出完整備份</button>
-        <button class="secondary" id="importBtn">匯入完整備份</button>
-        <input id="importFile" class="hidden" type="file" accept=".json,application/json">
-        <button class="danger" id="clearBtn">清空資料</button>
+      <div class="toolbar roster-toolbar">
+        <input class="search" id="search" placeholder="搜尋姓名、暱稱或編號"> 
+        <button class="secondary" id="selectAllBtn">全選參賽</button>
+        <button class="secondary" id="selectNoneBtn">取消全選</button>
       </div>
+      <details class="data-tools">
+        <summary>資料備份與管理</summary>
+        <div class="data-tool-actions">
+          <button class="secondary" id="exportBtn">匯出完整備份</button>
+          <button class="secondary" id="importBtn">匯入完整備份</button>
+          <input id="importFile" class="hidden" type="file" accept=".json,application/json">
+          <button class="danger" id="clearBtn">清空全部資料</button>
+        </div>
+        <p class="note">備份包含選手照片、參賽名單與目前對戰表。清空資料無法復原，建議先匯出備份。</p>
+      </details>
 
       <div class="tablewrap">
         <table>
           <thead><tr>
-            <th>照片</th><th>編號</th><th>姓名</th><th>國籍</th><th>暱稱</th><th>操作</th>
+            <th>參賽</th><th>照片</th><th>編號</th><th>姓名</th><th>國籍</th><th>暱稱</th><th>操作</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
         </table>
-        <div class="empty" id="empty">還沒有選手，從左側新增第一位。</div>
+        <div class="empty" id="empty"><strong>目前還沒有選手</strong><span>點右上角「新增選手」開始報名。</span></div>
       </div>
     </section>
   </div>
@@ -209,15 +322,29 @@ th{color:#93a1b4;font-size:12px}
 
   <section id="bracketView" class="view">
   <section class="card bracket-card">
-    <div class="bracket-toolbar">
-      <h2 style="margin:0;flex:1">隨機淘汰賽</h2>
+    <div class="section-heading bracket-heading">
+      <div><h2>淘汰賽對戰</h2><p>確認參賽名單後抽籤，長按選手照片 1 秒即可判定勝負。</p></div>
       <span class="direction-note" id="directionNote">等待抽籤</span>
-      <label class="court-setting">賽場 <input id="courtCount" type="number" min="1" max="99" value="3" inputmode="numeric"></label>
-      <select id="courtStyle" class="court-style" aria-label="賽場編號格式"><option value="number">1-1、2-1</option><option value="round-number">01-1、02-1</option><option value="letter-number">A-1、B-1</option></select>
-      <button id="drawBtn">隨機抽籤產生對戰</button>
-      <button class="secondary" id="clearBracketBtn">清除對戰表</button>
     </div>
-    <div class="bracket-info" id="bracketInfo">請先新增選手，再按「隨機抽籤產生對戰」。</div>
+    <div class="bracket-actions">
+      <button id="drawBtn">隨機抽籤，建立對戰表</button>
+      <details class="data-tools bracket-settings">
+        <summary>賽程設定</summary>
+        <div class="data-tool-actions settings-row">
+          <label class="court-setting">賽場數量 <input id="courtCount" type="number" min="1" max="99" value="3" inputmode="numeric"></label>
+          <label class="court-setting style-setting">賽場編號
+            <select id="courtStyle" class="court-style" aria-label="賽場編號格式"><option value="number">1-1、2-1</option><option value="round-number">01-1、02-1</option><option value="letter-number">A-1、B-1</option></select>
+          </label>
+          <button class="secondary" id="clearBracketBtn">清除對戰表</button>
+        </div>
+      </details>
+    </div>
+    <div class="hub-card" id="hubCard">
+      <div class="hub-head"><b>賽事連線</b><span class="hub-badge" id="hubBadge">未開啟</span><span class="hub-code" id="hubCode"></span><span class="grow"></span><button class="secondary small" id="hubCopyBtn" type="button" style="display:none">複製賽事碼</button><button class="small" id="hubToggle" type="button">開啟賽事連線</button></div>
+      <div class="hub-note" id="hubNote">開啟後，各賽場的主審在計分器「賽事主審」輸入賽事碼並選擇賽場，就會自動取得該賽場的場次與選手資料；選手房、同步房輸入該賽場的房間碼即可加入。此頁需保持開啟（建議螢幕常亮並接電源）。</div>
+      <div class="hub-courts" id="hubCourts"></div>
+    </div>
+    <div class="bracket-info" id="bracketInfo">請先新增選手，再按「隨機抽籤，建立對戰表」。</div>
     <div class="bracket-wrap"><div class="bracket" id="bracket"></div></div>
   </section>
   </section>
@@ -226,12 +353,21 @@ th{color:#93a1b4;font-size:12px}
 <div class="modal-backdrop" id="modalBackdrop"></div>
 
 <div class="toast" id="toast"></div>
+<div class="detail-backdrop hidden" id="detailBackdrop" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+  <section class="detail-card">
+    <button class="modal-close" id="detailCloseBtn" type="button">×</button>
+    <h2 id="detailTitle">選手資料</h2>
+    <div id="detailContent"></div>
+  </section>
+</div>
 
 <script>
 const STORAGE_KEY = "competition_players_v1";
 const DB_NAME = "competition_player_manager_db_v1";
 const CHANNEL_NAME = "competition_players_channel_v1";
 let players = [];
+let selectedIds = [];
+let hasSavedSelection = false;
 let bracket = null;
 let editingId = null;
 let photoData = "";
@@ -270,6 +406,8 @@ async function load(){
   try {
     const stored=await dbRequest({type:"get",key:"players"});
     bracket=await dbRequest({type:"get",key:"bracket"})||null;
+    const savedSelected=await dbRequest({type:"get",key:"selectedIds"});
+    if(Array.isArray(savedSelected)){selectedIds=savedSelected;hasSavedSelection=true;}
     if(Array.isArray(stored)) players=stored;
     else {
       const data=JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
@@ -280,9 +418,19 @@ async function load(){
     try {
       const data=JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
       players=Array.isArray(data)?data:[];
+      try { const saved=JSON.parse(localStorage.getItem("competition_selected_ids_v1")||"null"); if(Array.isArray(saved)){selectedIds=saved;hasSavedSelection=true;} } catch(err){}
     } catch(err){ players=[]; }
   }
+  selectedIds=selectedIds.filter(id=>players.some(p=>p.id===id));
+  if(!hasSavedSelection && !selectedIds.length && players.length) selectedIds=players.map(p=>p.id); // 舊資料首次載入時，預設全部參賽
+  await saveSelectedIds();
   render(); renderBracket();
+  try{ if(await dbRequest({type:"get",key:"hubOn"})&&bracket) hubStart(); else hubRender(); }catch(e){ hubRender(); }
+}
+async function saveSelectedIds(){
+  selectedIds=selectedIds.filter(id=>players.some(p=>p.id===id));
+  try { await dbRequest({type:"put",key:"selectedIds",value:selectedIds}); }
+  catch(e) { try { localStorage.setItem("competition_selected_ids_v1",JSON.stringify(selectedIds)); } catch(err){} }
 }
 async function saveAll(){
   const value=JSON.stringify(players);
@@ -299,8 +447,7 @@ async function saveAll(){
   }
   try { channel && channel.postMessage({type:"players-updated",players}); } catch(e){}
   try { window.dispatchEvent(new StorageEvent("storage",{key:STORAGE_KEY,newValue:value})); } catch(e){}
-  bracket=null;
-  try { await dbRequest({type:"put",key:"bracket",value:null}); } catch(e){}
+  await saveSelectedIds();
   renderBracket();
   return true;
 }
@@ -327,6 +474,9 @@ function render(){
   const q=document.getElementById("search").value.trim().toLowerCase();
   const list=players.filter(p=>[p.registrationNo,p.name,p.nickname,p.nationality].join(" ").toLowerCase().includes(q));
   document.getElementById("count").textContent=players.length;
+  document.getElementById("entrantCount").textContent=selectedIds.length;
+  const rosterStatus=document.getElementById("rosterStatus");
+  if(rosterStatus) rosterStatus.textContent=players.length?`${players.length} 位已建檔`:"尚未報名";
   const tbody=document.getElementById("tbody");
   tbody.innerHTML="";
   document.getElementById("empty").style.display=list.length?"none":"block";
@@ -336,6 +486,7 @@ function render(){
       ? `<img class="avatar" src="${p.photo}" alt="">`
       : `<div class="avatar noavatar">—</div>`;
     tr.innerHTML=`
+      <td><input type="checkbox" aria-label="${esc(p.name)}列入本次參賽" style="width:20px;height:20px;accent-color:#2d6cdf" ${selectedIds.includes(p.id)?"checked":""} onchange="toggleParticipant('${p.id}',this.checked)"></td>
       <td>${pic}</td>
       <td><span class="badge">${esc(p.registrationNo)}</span></td>
       <td>${esc(p.name)}</td>
@@ -343,6 +494,7 @@ function render(){
       <td>${esc(p.nickname||"—")}</td>
       <td>
         <div class="row">
+          <button class="small secondary" onclick="viewPlayer('${p.id}')">查看</button>
           <button class="small" onclick="selectPlayer('${p.id}')">選取</button>
           <button class="small secondary" onclick="editPlayer('${p.id}')">編輯</button>
           <button class="small danger" onclick="deletePlayer('${p.id}')">刪除</button>
@@ -415,7 +567,8 @@ document.getElementById("saveBtn").onclick=async()=>{
       updatedAt:new Date().toISOString()
     };
     players.push(p);
-    if(!await saveAll()) { players.pop(); return; }
+    selectedIds.push(p.id);
+    if(!await saveAll()) { players.pop(); selectedIds=selectedIds.filter(id=>id!==p.id); return; }
     toast(`已新增 ${p.registrationNo}`);
   }
   resetForm(); render(); closeForm();
@@ -423,6 +576,34 @@ document.getElementById("saveBtn").onclick=async()=>{
 document.getElementById("cancelBtn").onclick=()=>{resetForm();closeForm();};
 document.getElementById("search").oninput=render;
 
+window.toggleParticipant=async(id,checked)=>{
+  if(checked){if(!selectedIds.includes(id))selectedIds.push(id);}
+  else selectedIds=selectedIds.filter(x=>x!==id);
+  await saveSelectedIds();
+  render();
+  toast(checked?"已加入本次參賽名單":"已從本次參賽名單移除");
+};
+document.getElementById("selectAllBtn").onclick=async()=>{selectedIds=players.map(p=>p.id);await saveSelectedIds();render();toast("已選取全部選手參賽");};
+document.getElementById("selectNoneBtn").onclick=async()=>{selectedIds=[];await saveSelectedIds();render();toast("已取消全部參賽選取");};
+window.viewPlayer=id=>{
+  const p=players.find(x=>x.id===id);if(!p)return;
+  document.getElementById("detailTitle").textContent=`選手資料｜${p.registrationNo||""}`;
+  const content=document.getElementById("detailContent");
+  content.innerHTML="";
+  const photo=document.createElement("img");photo.className="detail-photo";photo.alt="選手照片";
+  if(p.photo)photo.src=p.photo;else photo.classList.add("hidden");
+  content.appendChild(photo);
+  const fields=document.createElement("div");fields.className="detail-fields";
+  [["選手編號",p.registrationNo],["姓名",p.name],["國籍／地區",p.nationality],["暱稱",p.nickname],["簡介／備註",p.bio],["本次參賽",selectedIds.includes(p.id)?"是":"否"]].forEach(([label,value])=>{
+    const item=document.createElement("div");item.className="detail-field";
+    const b=document.createElement("b");b.textContent=label;
+    const span=document.createElement("span");span.textContent=value||"—";
+    item.append(b,span);fields.appendChild(item);
+  });
+  content.appendChild(fields);document.getElementById("detailBackdrop").classList.remove("hidden");
+};
+document.getElementById("detailCloseBtn").onclick=()=>document.getElementById("detailBackdrop").classList.add("hidden");
+document.getElementById("detailBackdrop").onclick=e=>{if(e.target.id==="detailBackdrop")e.currentTarget.classList.add("hidden");};
 window.selectPlayer=id=>{
   const p=players.find(x=>x.id===id); if(!p)return;
   const selected={...p};
@@ -457,12 +638,19 @@ window.editPlayer=id=>{
 };
 window.deletePlayer=async id=>{
   const p=players.find(x=>x.id===id); if(!p)return;
-  if(!confirm(`確定刪除 ${p.registrationNo} ${p.name}？`))return;
-  players=players.filter(x=>x.id!==id);
-  if(await saveAll()){ render(); toast("已刪除"); }
+  const usedInBracket=!!bracket&&bracket.rounds.some(round=>round.some(m=>m.p1===id||m.p2===id||m.winner===id));
+  const prompt=usedInBracket
+    ? `確定刪除 ${p.registrationNo} ${p.name}？此選手已在目前淘汰賽中，刪除後也會清除整份對戰表。`
+    : `確定刪除 ${p.registrationNo} ${p.name}？`;
+  if(!confirm(prompt))return;
+  const oldPlayers=players,oldSelected=selectedIds,oldBracket=bracket;
+  players=players.filter(x=>x.id!==id);selectedIds=selectedIds.filter(x=>x!==id);
+  if(usedInBracket)bracket=null;
+  if(await saveAll()){ if(usedInBracket)await saveBracket();render();toast(usedInBracket?"已刪除選手並清除受影響的對戰表":"已刪除"); }
+  else {players=oldPlayers;selectedIds=oldSelected;bracket=oldBracket;render();}
 };
 document.getElementById("exportBtn").onclick=()=>{
-  const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),players,bracket},null,2)],{type:"application/json"});
+  const blob=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),players,selectedIds,bracket},null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="competition-players-backup.json";a.click();
   URL.revokeObjectURL(a.href);
 };
@@ -476,7 +664,9 @@ document.getElementById("importFile").onchange=e=>{
       const incoming=Array.isArray(data)?data:data.players;
       if(!Array.isArray(incoming))throw Error();
       const importedBracket=data.bracket||null;
+      const importedSelected=Array.isArray(data.selectedIds)?data.selectedIds:null;
       players=incoming;
+      selectedIds=importedSelected?importedSelected.filter(id=>players.some(p=>p.id===id)):players.map(p=>p.id);
       if(await saveAll()){
         bracket=importedBracket;
         await saveBracket();
@@ -489,10 +679,10 @@ document.getElementById("importFile").onchange=e=>{
 };
 document.getElementById("clearBtn").onclick=async()=>{
   if(!players.length)return;
-  if(confirm("確定清空全部選手資料？此操作無法復原，建議先匯出 JSON。")){
-    const old=players; players=[];
-    if(await saveAll()){render();resetForm();toast("資料已清空");}
-    else players=old;
+  if(confirm("確定清空全部選手資料、參賽名單與對戰表？此操作無法復原，建議先匯出 JSON。")){
+    const old=players,oldSelected=selectedIds,oldBracket=bracket; players=[];selectedIds=[];bracket=null;
+    if(await saveAll()){await saveBracket();render();resetForm();toast("資料已清空");}
+    else {players=old;selectedIds=oldSelected;bracket=oldBracket;}
   }
 };
 function playerLabel(id){
@@ -504,11 +694,22 @@ function getCourtConfig(){
   const style=document.getElementById("courtStyle")?.value||"number";
   return {count,style};
 }
+function computeReal(){
+  const R=bracket.rounds,prod=[],real=[];
+  R.forEach((round,ri)=>{prod[ri]=[];real[ri]=[];round.forEach((m,mi)=>{
+    if(ri===0){prod[0][mi]=!!(m.p1||m.p2);real[0][mi]=!!(m.p1&&m.p2);}
+    else{const a=prod[ri-1][mi*2],b=prod[ri-1][mi*2+1];prod[ri][mi]=!!(a||b);real[ri][mi]=!!(a&&b);}
+  });});
+  return real;
+}
 function assignCourts(){
   if(!bracket)return;
   const config=bracket.courtConfig||getCourtConfig();
+  const real=computeReal();
   let sequence=0;
-  bracket.rounds.forEach(round=>round.forEach(match=>{
+  bracket.rounds.forEach((round,ri)=>round.forEach((match,mi)=>{
+    match.real=!!real[ri][mi];
+    if(!match.real){match.courtNo=null;match.courtOrder=null;return;}
     match.courtNo=(sequence%config.count)+1;
     match.courtOrder=Math.floor(sequence/config.count)+1;
     sequence++;
@@ -579,6 +780,7 @@ window.chooseWinner=async(r,i,id)=>{
   if(m.p1!==id&&m.p2!==id)return;
   if(m.winner===id){
     m.winner=null;
+    m.resolved=false;
     removeWinnerFromNext(r,i,id);
     await saveBracket();
     toast(`${playerLabel(id)} 已返回上一戰`);
@@ -596,6 +798,7 @@ function renderBracket(){
   const info=document.getElementById("bracketInfo");
   const direction=document.getElementById("directionNote");
   if(!el||!info)return;
+  hubSchedule();
   el.innerHTML="";
   syncCourtControls();
   const compact=players.length<=8;
@@ -603,14 +806,15 @@ function renderBracket(){
   assignCourts();
   if(direction)direction.textContent=compact?"少人：由下往上":"多人：左右往冠軍";
   if(!bracket){info.textContent=players.length<2?"請先新增至少 2 位選手，再按「隨機抽籤產生對戰」。":"按「隨機抽籤產生對戰」建立單淘汰賽。";return;}
-  info.textContent=`共 ${players.length} 位選手；賽場編號為「賽場－順序」，長按照片即可晉級或返回上一戰。`;
+  const entrantCount=bracket.entrantIds?.length||new Set(bracket.rounds[0].flatMap(m=>[m.p1,m.p2]).filter(Boolean)).size;
+  info.textContent=`本次參賽 ${entrantCount} 位；賽場編號為「賽場－順序」。抽籤後修改參賽勾選不會改動現有賽程；要套用新名單請重新抽籤。長按照片 1 秒即可確認勝者，再長按勝者可撤銷。`;
   bracket.rounds.forEach((round,ri)=>{
     const col=document.createElement("div");col.className="round";
     col.innerHTML=`<h3>${roundName(ri,bracket.rounds.length)}</h3>`;
     const matches=document.createElement("div");matches.className="matches";
     round.forEach((m,mi)=>{
       const box=document.createElement("div");box.className="match";
-      const court=document.createElement("div");court.className="court-label";court.textContent=`賽場 ${courtLabel(m)}`;box.appendChild(court);
+      const court=document.createElement("div");court.className="court-label";court.dataset.rid=ri+"-"+mi;court.textContent=matchStatusText(ri,mi,m);box.appendChild(court);
       [m.p1,m.p2].forEach((id,si)=>{
         const slot=document.createElement("div");
           const eliminated=!!(id&&m.winner&&m.winner!==id);
@@ -639,9 +843,10 @@ function renderBracket(){
   }
 }
 document.getElementById("drawBtn").onclick=async()=>{
-  if(players.length<2){toast("至少需要 2 位選手才能抽籤");return;}
+  const entrants=players.filter(p=>selectedIds.includes(p.id));
+  if(entrants.length<2){toast("請至少勾選 2 位本次參賽選手");return;}
   if(bracket&&!confirm("重新抽籤會覆蓋目前對戰結果，確定嗎？"))return;
-  const ids=players.map(p=>p.id);
+  const ids=entrants.map(p=>p.id);
   for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]];}
   const size=2**Math.ceil(Math.log2(ids.length));
   while(ids.length<size)ids.push(null);
@@ -658,7 +863,7 @@ document.getElementById("drawBtn").onclick=async()=>{
     if(m.p2&&!m.p1)m.winner=m.p2;
     if(!m.p1&&!m.p2)m.resolved=true;
   });
-  bracket={createdAt:new Date().toISOString(),rounds,courtConfig:getCourtConfig()};
+  bracket={createdAt:new Date().toISOString(),rounds,courtConfig:getCourtConfig(),entrantIds:ids.filter(Boolean),tcode:(bracket&&bracket.tcode)||genTCode()};
   assignCourts();
   rounds[0].forEach((m,i)=>propagateWinner(0,i,m.winner||null));
   await saveBracket();
@@ -679,6 +884,254 @@ document.getElementById("clearBracketBtn").onclick=async()=>{
   if(!bracket)return;
   if(confirm("確定清除目前對戰表？")){bracket=null;await saveBracket();toast("對戰表已清除");}
 };
+
+/* ===== 賽事連線中樞（PeerJS）=====
+   計分器主審輸入「賽事碼」連線進來、選擇賽場後，會收到該賽場的場次佇列與選手資料（queue），
+   並持續回傳目前比賽狀態（status）。房間碼 = 賽事碼 + 賽場編號，例如 K7QD + A = K7QDA。 */
+const HUB={peer:null,on:false,open:false,conns:new Set(),courts:{},live:{},hb:null,retry:0,lock:null,note:"",st:null};
+const TC_ALPHA="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function genTCode(){let s="";for(let i=0;i<4;i++)s+=TC_ALPHA[Math.floor(Math.random()*TC_ALPHA.length)];return s;}
+function courtBase(n){
+  const style=(bracket?.courtConfig||getCourtConfig()).style;
+  if(style==="letter-number")return n<=26?String.fromCharCode(64+n):String(n);
+  if(style==="round-number")return String(n).padStart(2,"0");
+  return String(n);
+}
+const hubAlive=c=>!!c&&c.open&&Date.now()-(c.__seen||0)<16000;
+const hubCourtCount=()=>(bracket?.courtConfig||getCourtConfig()).count;
+function hubRoom(n){return (bracket?.tcode||"")+courtBase(n);}
+function hubCourtInfo(n){return {n,label:courtBase(n),room:hubRoom(n)};}
+function hubCourtsList(){
+  const out=[],cnt=hubCourtCount();
+  for(let n=1;n<=cnt;n++){const h=HUB.courts[n];out.push({...hubCourtInfo(n),taken:hubAlive(h?.conn),by:hubAlive(h?.conn)?(h.name||""):""});}
+  return out;
+}
+function natCode(s){
+  const cps=[...String(s||"")].map(c=>c.codePointAt(0)).filter(c=>c>=0x1F1E6&&c<=0x1F1FF);
+  return cps.length>=2?String.fromCharCode(65+cps[0]-0x1F1E6,65+cps[1]-0x1F1E6):"";
+}
+const thumbCache=new Map();
+function playerKey(p){return [p.id,p.name,p.nationality,p.nickname,(p.photo||"").length,p.updatedAt||""].join("|");}
+function makeThumb(p){
+  return new Promise(resolve=>{
+    if(!p.photo){resolve("");return;}
+    const k=playerKey(p);if(thumbCache.has(k)){resolve(thumbCache.get(k));return;}
+    const img=new Image();
+    img.onload=()=>{
+      const W=320,H=240,c=document.createElement("canvas");c.width=W;c.height=H;
+      const s=Math.max(W/img.width,H/img.height),w=img.width*s,h=img.height*s;
+      c.getContext("2d").drawImage(img,(W-w)/2,(H-h)/2,w,h);
+      const d=c.toDataURL("image/jpeg",.8);thumbCache.set(k,d);resolve(d);
+    };
+    img.onerror=()=>resolve("");
+    img.src=p.photo;
+  });
+}
+async function playerPayload(p){
+  return {id:p.id,no:p.registrationNo||"",name:p.name||"",nat:natCode(p.nationality),natText:p.nationality||"",nick:p.nickname||"",photo:await makeThumb(p)};
+}
+function courtQueue(n){
+  assignCourts();
+  const out=[];
+  bracket.rounds.forEach((round,ri)=>round.forEach((m,mi)=>{
+    if(m.courtNo!==n)return;
+    const done=!!(m.winner&&m.resolved);
+    out.push({rid:ri+"-"+mi,r:ri,i:mi,label:courtLabel(m),order:m.courtOrder,round:roundName(ri,bracket.rounds.length),
+      p1:m.p1||null,p2:m.p2||null,status:done?"done":((m.p1&&m.p2)?"ready":"waiting"),
+      w:done?(m.winner===m.p1?"p1":m.winner===m.p2?"p2":null):null});
+  }));
+  return out.sort((a,b)=>a.order-b.order);
+}
+function hubPush(n,conn,force){
+  const c=conn||HUB.courts[n]?.conn;
+  if(!c||!c.open||!bracket)return Promise.resolve();
+  c.__chain=(c.__chain||Promise.resolve()).then(async()=>{
+    if(!c.open||!bracket)return;
+    const q=courtQueue(n),info=hubCourtInfo(n),need=new Set();
+    q.forEach(m=>{if(m.p1)need.add(m.p1);if(m.p2)need.add(m.p2);});
+    c.__sent=c.__sent||new Map();
+    const players={};
+    for(const id of need){
+      const p=players_find(id);
+      if(!p)continue;
+      const key=playerKey(p);
+      if(c.__sent.get(id)!==key){players[id]=await playerPayload(p);c.__sent.set(id,key);}
+    }
+    const sig=JSON.stringify([info,q]);
+    if(!force&&c.__sig===sig&&!Object.keys(players).length)return;
+    c.__sig=sig;
+    try{c.send({type:"queue",pv:1,tcode:bracket.tcode,court:info,matches:q,players});}catch(e){}
+  }).catch(()=>{});
+  return c.__chain;
+}
+function players_find(id){return players.find(x=>x.id===id);}
+function hubPushAll(force){Object.keys(HUB.courts).forEach(n=>{if(HUB.courts[n]?.conn)hubPush(Number(n),null,force);});}
+function hubSchedule(){
+  clearTimeout(HUB.st);
+  HUB.st=setTimeout(()=>{
+    if(!HUB.on)return;
+    if(!bracket){hubStop(true);return;}
+    hubPushAll();hubRender();
+  },150);
+}
+function hubDrop(c){
+  HUB.conns.delete(c);
+  Object.keys(HUB.courts).forEach(n=>{if(HUB.courts[n]?.conn===c){delete HUB.courts[n];}});
+  try{c.close();}catch(e){}
+  hubRender();hubRefreshLabels();
+}
+function hubClaim(c,n,force){
+  const cnt=hubCourtCount();
+  if(!Number.isInteger(n)||n<1||n>cnt){try{c.send({type:"claimRejected",reason:"invalid"});}catch(e){}return;}
+  const cur=HUB.courts[n];
+  if(cur&&cur.conn!==c&&hubAlive(cur.conn)&&cur.dev!==c.__dev&&!force){
+    try{c.send({type:"claimRejected",reason:"taken",by:cur.name||"",n});}catch(e){}return;
+  }
+  if(cur&&cur.conn!==c){try{cur.conn.send({type:"kicked"});}catch(e){}setTimeout(()=>{try{cur.conn.close();}catch(e){}},300);}
+  Object.keys(HUB.courts).forEach(k=>{if(HUB.courts[k]?.conn===c&&Number(k)!==n)delete HUB.courts[k];});
+  HUB.courts[n]={conn:c,dev:c.__dev,name:c.__name||"",t:Date.now()};
+  c.__court=n;c.__sig="";c.__sent=new Map();
+  try{c.send({type:"claimed",pv:1,court:hubCourtInfo(n)});}catch(e){}
+  hubPush(n,c,true);hubRender();hubRefreshLabels();
+}
+function hubMsg(c,m){
+  if(!m||typeof m!=="object")return;
+  switch(m.type){
+    case "ping":try{c.send({type:"pong"});}catch(e){}break;
+    case "hello":
+      c.__dev=m.deviceId||"";c.__name=m.name||"";
+      try{c.send({type:"courts",pv:1,tcode:bracket?.tcode||"",courts:hubCourtsList()});}catch(e){}
+      break;
+    case "claim":hubClaim(c,Number(m.n),!!m.force);break;
+    case "status":
+      if(c.__court&&HUB.courts[c.__court]?.conn===c){
+        const prev=HUB.live[c.__court];
+        HUB.live[c.__court]={...m,t:Date.now()};
+        if(!prev||prev.rid!==m.rid||prev.phase!==m.phase||prev.blue!==m.blue||prev.red!==m.red||prev.devs!==m.devs||prev.ok!==m.ok){hubRender();hubRefreshLabels();}
+      }
+      break;
+  }
+}
+function hubOnConn(c){
+  HUB.conns.add(c);c.__seen=Date.now();
+  c.on("open",()=>{c.__seen=Date.now();});
+  c.on("data",m=>{c.__seen=Date.now();hubMsg(c,m);});
+  c.on("close",()=>hubDrop(c));
+  c.on("error",()=>hubDrop(c));
+}
+function hubTick(){
+  HUB.conns.forEach(c=>{
+    if(c.open&&Date.now()-(c.__seen||0)>16000){hubDrop(c);return;}
+    try{c.send({type:"ping"});}catch(e){}
+  });
+  hubRender();hubRefreshLabels();
+}
+async function saveHubOn(v){try{await dbRequest({type:"put",key:"hubOn",value:!!v});}catch(e){}}
+async function hubWake(on){
+  try{
+    if(on){if(!HUB.lock&&navigator.wakeLock){HUB.lock=await navigator.wakeLock.request("screen");HUB.lock.addEventListener("release",()=>{HUB.lock=null;});}}
+    else if(HUB.lock){await HUB.lock.release();HUB.lock=null;}
+  }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&HUB.on)hubWake(true);});
+function hubStopPeer(){
+  clearInterval(HUB.hb);HUB.hb=null;
+  HUB.conns.forEach(c=>{try{c.send({type:"closed"});}catch(e){}try{c.close();}catch(e){}});
+  HUB.conns.clear();HUB.courts={};HUB.live={};
+  if(HUB.peer){try{HUB.peer.destroy();}catch(e){}HUB.peer=null;}
+  HUB.open=false;
+}
+function hubStop(auto){
+  hubStopPeer();HUB.on=false;HUB.retry=0;HUB.note="";saveHubOn(false);hubWake(false);hubRender();hubRefreshLabels();
+  if(auto)toast("對戰表已清除，賽事連線已關閉");
+}
+async function hubStart(){
+  if(!bracket){toast("請先抽籤建立對戰表");hubRender();return;}
+  if(typeof Peer==="undefined"){HUB.note="連線元件沒有載入（連不到 unpkg.com／被網路或廣告攔截擋掉），請換網路後重新整理";hubRender();return;}
+  if(!bracket.tcode){bracket.tcode=genTCode();try{await dbRequest({type:"put",key:"bracket",value:bracket});}catch(e){}}
+  hubStopPeer();HUB.on=true;saveHubOn(true);hubWake(true);
+  const p=new Peer("bsT-"+bracket.tcode);HUB.peer=p;HUB.open=false;HUB.note="連線伺服器中…";hubRender();
+  p.on("open",()=>{if(HUB.peer!==p)return;HUB.open=true;HUB.retry=0;HUB.note="";hubRender();hubRefreshLabels();});
+  p.on("connection",c=>{if(HUB.peer===p)hubOnConn(c);});
+  p.on("error",e=>{
+    if(HUB.peer!==p)return;
+    if(e&&e.type==="unavailable-id"){
+      HUB.retry++;
+      if(HUB.retry<=6){HUB.note="賽事碼暫時被占用（上次連線還沒釋放），自動重試中…";hubRender();setTimeout(()=>{if(HUB.on&&HUB.peer===p)hubStart();},3000);}
+      else{bracket.tcode=genTCode();HUB.retry=0;saveBracket();toast("原賽事碼被占用，已改用新的賽事碼："+bracket.tcode);hubStart();}
+      return;
+    }
+    HUB.note="連線錯誤："+((e&&e.message)||e);hubRender();
+  });
+  p.on("disconnected",()=>{
+    if(HUB.peer!==p)return;HUB.open=false;hubRender();
+    const rc=()=>{if(HUB.peer!==p||!HUB.on)return;if(p.disconnected){try{p.reconnect();}catch(e){}setTimeout(rc,3000);}else{HUB.open=true;hubRender();}};
+    setTimeout(rc,1500);
+  });
+  HUB.hb=setInterval(hubTick,5000);
+}
+function hubLiveText(n){
+  const h=HUB.courts[n];
+  if(!hubAlive(h?.conn))return "尚未連線";
+  const lv=HUB.live[n];
+  let t="主審已連線"+(h.name?"（"+h.name+"）":"");
+  if(lv){
+    if(lv.devs)t+=" · 同步裝置 "+lv.devs+" 台";
+    if(lv.rid&&bracket){const [r,i]=String(lv.rid).split("-").map(Number),m=bracket.rounds[r]?.[i];
+      if(m){t+=" · "+courtLabel(m)+" "+({prep:"準備中",live:"比賽中",ended:"等待確認"}[lv.phase]||"");if(lv.phase!=="prep")t+=" "+lv.blue+":"+lv.red;}}
+    else t+=" · 尚未載入場次";
+  }
+  return t;
+}
+function hubRender(){
+  const badge=document.getElementById("hubBadge"),code=document.getElementById("hubCode"),tog=document.getElementById("hubToggle"),
+        copy=document.getElementById("hubCopyBtn"),note=document.getElementById("hubNote"),box=document.getElementById("hubCourts");
+  if(!badge)return;
+  const on=HUB.on;
+  badge.textContent=!on?"未開啟":(HUB.open?"連線中":"連線伺服器中…");
+  badge.className="hub-badge"+(on&&HUB.open?" on":(on?" warn":""));
+  code.textContent=(on&&bracket?.tcode)||"";
+  tog.textContent=on?"關閉賽事連線":"開啟賽事連線";
+  copy.style.display=on&&bracket?.tcode?"":"none";
+  if(HUB.note){note.textContent=HUB.note;}
+  else if(!on){note.textContent="開啟後，各賽場的主審在計分器「賽事主審」輸入賽事碼並選擇賽場，就會自動取得該賽場的場次與選手資料；選手房、同步房輸入該賽場的房間碼即可加入。此頁需保持開啟（建議螢幕常亮並接電源）。";}
+  else{note.textContent="賽事碼 "+bracket.tcode+"：主審輸入此碼並選擇賽場。選手房／同步房請輸入下方各賽場的房間碼。";}
+  box.innerHTML="";
+  if(!on||!bracket)return;
+  hubCourtsList().forEach(ci=>{
+    const alive=ci.taken;
+    const row=document.createElement("div");row.className="hub-court";
+    row.innerHTML=`<span class="cn">${esc(ci.label)} 賽場</span><span class="rc">${esc(ci.room)}</span><button class="secondary small" type="button">複製房間碼</button><span class="st"><i class="hub-dot${alive?" on":""}"></i>${esc(hubLiveText(ci.n))}</span>`;
+    row.querySelector("button").onclick=()=>copyText(ci.room);
+    box.appendChild(row);
+  });
+}
+function copyText(t){
+  try{navigator.clipboard.writeText(t).then(()=>toast("已複製 "+t),()=>toast(t));}catch(e){toast(t);}
+}
+function matchStatusText(ri,mi,m){
+  if(!m.real)return ri===0?"輪空":"自動晉級";
+  const base="賽場 "+courtLabel(m);
+  let st;
+  if(m.winner&&m.resolved)st="已完賽";
+  else{
+    const lv=HUB.live[m.courtNo];
+    if(lv&&lv.rid===ri+"-"+mi&&hubAlive(HUB.courts[m.courtNo]?.conn)){
+      st=lv.phase==="live"?`比賽中 ${lv.blue}:${lv.red}`:lv.phase==="ended"?`等待確認 ${lv.blue}:${lv.red}`:"準備中";
+    }else st=(m.p1&&m.p2)?"待賽":"等待上一場";
+  }
+  return base+" · "+st;
+}
+function hubRefreshLabels(){
+  if(!bracket)return;
+  document.querySelectorAll(".court-label[data-rid]").forEach(el=>{
+    const [r,i]=el.dataset.rid.split("-").map(Number),m=bracket.rounds[r]?.[i];
+    if(m){const t=matchStatusText(r,i,m);if(el.textContent!==t)el.textContent=t;}
+  });
+}
+document.getElementById("hubToggle").onclick=()=>{if(HUB.on)hubStop();else hubStart();};
+document.getElementById("hubCopyBtn").onclick=()=>{if(bracket?.tcode)copyText(bracket.tcode);};
+
 function toast(msg){
   const el=document.getElementById("toast");el.textContent=msg;el.classList.add("show");
   clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove("show"),1800);
