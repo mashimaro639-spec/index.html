@@ -635,7 +635,9 @@ function setCameraState(next,preserveStream=false){
     $('cameraStatus').textContent='攝影待機';
   }
 }
+let cameraBusy=false;
 async function startCamera(){
+  if(cameraBusy)return false; // 正在向瀏覽器要鏡頭時，重複點擊不再多開一路
   // Rebind a still-live stream after camera close; otherwise the video element can remain black.
   if(cameraStream){
     const liveVideoTrack=cameraStream.getVideoTracks().find(t=>t.readyState==='live');
@@ -654,13 +656,17 @@ async function startCamera(){
   if(!window.isSecureContext){showCameraHelp('目前沒有取得相機畫面，現在先進入排版預覽模式。');setCameraState('standby');$('cameraStatus').textContent='排版預覽模式（尚未取得相機畫面）';return false;}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showCameraHelp('此瀏覽器目前無法取得相機，現在先進入排版預覽模式。');setCameraState('standby');$('cameraStatus').textContent='排版預覽模式（尚未取得相機畫面）';return false;}
   let videoStream;
+  cameraBusy=true;
   try{
     videoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:cameraFacing}},audio:false});
   }catch(e){
+    cameraBusy=false;
     const msg=e&&e.name==='NotAllowedError'?'相機權限被拒絕或已封鎖，請按權限說明允許相機。':e&&e.name==='NotFoundError'?'找不到相機，請確認鏡頭可用。':e&&e.name==='OverconstrainedError'?'相機不支援目前設定，請重新請求相機。':'瀏覽器無法取得相機權限，請檢查 HTTPS 與網站設定。';
     showCameraHelp(msg);setCameraState('standby');$('cameraStatus').textContent='排版預覽模式（尚未取得相機畫面）';return false;
   }
+  cameraBusy=false;
   cameraStream=new MediaStream(videoStream.getVideoTracks());
+  const myStream=cameraStream;
   $('cameraPreview').srcObject=cameraStream;
   $('cameraLayer').classList.remove('placeholder');
   setCameraState('standby');
@@ -669,6 +675,7 @@ async function startCamera(){
   if(track) setTimeout(()=>formatCameraInfo(track),150);
   try{
     const audioStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    if(cameraStream!==myStream){audioStream.getTracks().forEach(t=>t.stop());return false}
     audioStream.getAudioTracks().forEach(t=>cameraStream.addTrack(t));
   }catch(e){$('cameraStatus').textContent='攝影待機（麥克風未允許，將以無聲錄影）';}
   return true;
@@ -927,7 +934,7 @@ $('closeCameraBtn').onclick=async()=>{
   if(cameraState==='off'){
     await startCamera();
   }else{
-    if(cameraState==='recording')return;
+    if(cameraState==='recording'||cameraBusy)return;
     if(cameraStream){
       // 關閉鏡頭：釋放鏡頭，畫面留在攝影（動畫）模式並自動改用 3D 背景
       try{cameraStream.getTracks().forEach(t=>t.stop())}catch(e){}
@@ -1242,6 +1249,7 @@ syncStateFromInputs();
   <input id="syncTourInput" maxlength="8" placeholder="輸入賽事碼" autocomplete="off">
   <div class="sync-grid sync-complete"><button class="primary" id="syncTourJoinBtn">連線賽事</button><button id="syncTourLeaveBtn">離開賽事</button></div>
   <div id="syncTourStatus" class="sync-status" style="margin-top:10px">尚未連線</div>
+  <div class="sync-status" style="margin-top:8px"><a href="https://htmlpreview.github.io/?https://github.com/mashimaro639-spec/index.html/blob/main/competition_player_manager.html" target="_blank" rel="noopener" style="color:#7fb0ff">開啟賽事管理頁（取得賽事碼）</a></div>
   <div class="sync-device-list" id="syncTourCourts"></div>
   <button class="close sync-complete" id="syncTourDone">完成</button>
 </div>
@@ -1504,20 +1512,39 @@ syncStateFromInputs();
       call.on('stream',stream=>{if(role==='player')return;if(role==='clone'){const v=$m('cameraPreview');if(v){v.srcObject=stream;v.play().catch(()=>{});}try{window.__hostView&&window.__hostView.cloneVideo(true)}catch(e){}return;}if(role==='player'||role==='viewer'){const v=$m('arenaCameraVideo');try{if(v.srcObject&&v.srcObject!==stream)v.srcObject.getTracks().forEach(t=>t.stop())}catch(e){}v.srcObject=stream;arenaVideoLive=true;try{stream.getTracks().forEach(t=>t.addEventListener('ended',()=>{if(v.srcObject===stream){arenaVideoLive=false;setArenaMode(arenaMode,true)}}))}catch(e){}v.play().catch(()=>{});setArenaMode(arenaMode==='replay'?'replay':(hostCamOff?'split':'camera'),true)}});
     });
   }
+  let hostOpenTimer=null,hostStuckN=0;
   function startHost(restoreCode,tries){
     if(typeof restoreCode!=='string')restoreCode=null;
+    if(!restoreCode&&tries===undefined)hostStuckN=0;
     stopLiveSim(true);
     if(peer){try{peer.destroy()}catch(e){}}
     roomCode=restoreCode||randomCode();isHost=true;hostServerDown=false;role='host';refreshSoundButtons();syncConnections.clear();
     stopSyncHeartbeat();
     peer=new Peer('bs-'+roomCode);setupIncomingCall();
-    peer.on('open',()=>{$m('syncRoomCode').textContent=roomCode;setStatus('房間已建立，等待裝置加入');localStorage.setItem(SYNC_KEY,roomCode);jset(HOST_KEY,{code:roomCode,t:Date.now()});hostServerDown=false;renderDevices();});
+    const hp=peer,hCode=roomCode;
+    /* 房間碼是本機先產生的：立刻顯示，不再等伺服器回應才出現；伺服器太慢時自動重連 */
+    $m('syncRoomCode').textContent=roomCode;setStatus('連線伺服器中…（房間碼已產生，連上後其他裝置才能加入）');
+    clearTimeout(hostOpenTimer);
+    hostOpenTimer=setTimeout(()=>{
+      if(peer!==hp||!isHost||roomCode!==hCode||hp.open)return;
+      if(hostStuckN<4){hostStuckN++;setStatus('連線伺服器較慢，重新連線中…（第 '+hostStuckN+' 次）');startHost(restoreCode||hCode,tries)}
+      else setStatus('連線伺服器沒有回應，請確認網路後重新按「創建房間」');
+    },9000);
+    peer.on('open',()=>{if(peer!==hp)return;clearTimeout(hostOpenTimer);hostStuckN=0;$m('syncRoomCode').textContent=roomCode;setStatus('房間已建立，等待裝置加入');localStorage.setItem(SYNC_KEY,roomCode);jset(HOST_KEY,{code:roomCode,t:Date.now()});hostServerDown=false;renderDevices();});
     peer.on('connection',c=>{
       c.__lastSeen=Date.now();syncConnections.set(c.peer,c);c.on('open',()=>{c.__lastSeen=Date.now();send(c,{type:'state',state:snapshot()});send(c,{type:'displayMode',mode:arenaMode==='camera'?'camera':'split'});renderDevices();setStatus('有裝置加入同步');});
       c.on('data',msg=>{c.__lastSeen=Date.now();if(msg.type==='pong')return;if(msg.type==='ping'){send(c,{type:'pong'});return}if(msg.type==='liveStatus'){c.__rec=msg.status||'';const kd=c.__devId&&knownDevices.get(c.__devId);if(kd)kd.rec=c.__rec;if(msg.event)logDev(msg.event,c.__name||'');renderDevices();return}if(msg.type==='hello'){if(!registerDevice(c,msg)){send(c,{type:'rejected',reason:'name',name:msg.name});setTimeout(()=>{try{c.close()}catch(e){}syncConnections.delete(c.peer);renderDevices()},500);return}c.__role=msg.role||'player';renderDevices();send(c,{type:'state',state:snapshot()});send(c,{type:'displayMode',mode:arenaMode==='camera'?'camera':'split'});send(c,{type:'cameraState',mode:(typeof cameraState==='string'&&cameraState)?(cameraState==='off'?'camera-off':'camera-'+cameraState):'camera-off'});send(c,{type:'playerInfo',info:playerInfoSnap()});if(cameraStream&&cameraState!=='off'&&c.__role!=='live'&&c.__role!=='player'&&c.__role!=='viewer'&&c.__role!=='cam'){try{const call=peer.call(c.peer,cameraStream);call.on('error',()=>{})}catch(e){}}return}if(msg.type==='state'){if(c.__role==='clone'){applyRemoteState(msg.state);broadcast({type:'state',state:snapshot()},c)}return}if(msg.type==='mistakeRequest'){if(c.__role==='clone')registerMistake(msg.team);return}if(msg.type==='command'){if((c.__role==='clone'||(c.__role==='player'&&!['nextRoundBtn','winBackBtn','blueMistakeBtn','redMistakeBtn','undoBtn','matchResetBtn'].includes(msg.id)))&&msg.id){const el=$m(msg.id);if(el){applyingRemote=true;el.click();applyingRemote=false;}}return}if(msg.type==='readyToggle')handleReadyToggle(msg,c);else if(msg.type==='stateRequest')send(c,{type:'state',state:snapshot()});else if(msg.type==='signal')broadcast(msg,c)});
       c.on('close',()=>{markGone(c);syncConnections.delete(c.peer);renderDevices()});c.on('error',()=>{markGone(c);syncConnections.delete(c.peer);renderDevices()});
     });
-    peer.on('error',e=>{if(e&&e.type==='unavailable-id'&&restoreCode&&(tries||0)<20){setStatus('房間碼暫時被占用（上次連線還沒釋放），自動重試中…');const t=(tries||0)+1;setTimeout(()=>{if(isHost&&roomCode===restoreCode)startHost(restoreCode,t)},3000);return}setStatus('Peer 連線錯誤：'+e.message)});
+    peer.on('error',e=>{
+      if(peer!==hp)return;
+      if(e&&e.type==='unavailable-id'){
+        let fixed=false;try{fixed=!!(T.room&&roomCode===T.room)}catch(_){}   /* 賽事固定房間碼不能換 */
+        const n=(tries||0)+1;
+        if(restoreCode&&n<=(fixed?40:6)){setStatus('房間碼 '+roomCode+' 還在被伺服器釋放中，自動重試中…（'+n+'）');setTimeout(()=>{if(isHost&&roomCode===restoreCode&&peer===hp)startHost(restoreCode,n)},1500);return}
+        if(!fixed){startHost(null);setStatus('原房間碼還被伺服器占用，已改用新房間碼，連線中…');return}
+      }
+      setStatus('Peer 連線錯誤：'+e.message)});
     peer.on('disconnected',()=>{hostServerDown=true;const rc=()=>{if(!isHost||!peer)return;if(peer.disconnected){try{peer.reconnect()}catch(e){}setTimeout(rc,3000)}else hostServerDown=false};setTimeout(rc,1500)});
     startSyncHeartbeat();
   }
@@ -1774,7 +1801,7 @@ syncStateFromInputs();
     });
   }
   function tourLeave(){
-    tourClose();jdel(TOUR_KEY);T.court=0;T.room='';T.label='';T.matches=[];T.loaded='';T.loadedSig='';T.st='idle';tnote('已離開賽事');renderTour();
+    tourClose();jdel(TOUR_KEY);T.court=0;T.room='';T.label='';T.matches=[];T.loaded='';T.loadedSig='';T.st='idle';T.rules=null;T.rulesApplied='';T.rulesPending=null;lockRules(false);tnote('已離開賽事');renderTour();
   }
   function ensureTourRoom(){
     const want=T.room;if(!want)return;
@@ -1809,11 +1836,12 @@ syncStateFromInputs();
         Object.assign(T.players,m.players||{});
         T.matches=m.matches||[];
         if(m.court&&m.court.room&&m.court.room!==T.room){T.room=m.court.room;T.label=m.court.label;tsave();ensureTourRoom()}
+        if(m.rules){T.rules=m.rules;applyRules(m.rules,false)}else if(T.rulesLocked){T.rules=null;T.rulesApplied='';T.rulesPending=null;lockRules(false)}
         refreshLoaded();
         if(!T.loaded){const first=T.matches.find(x=>x.status==='ready');if(first)tourLoad(first.rid,true)}
         renderTour();break;
       case 'kicked':
-        const oldRoom=T.room;T.court=0;jdel(TOUR_KEY);tourClose();T.st='idle';T.matches=[];T.loaded='';tnote('這個賽場已被其他主審接管');
+        const oldRoom=T.room;T.court=0;jdel(TOUR_KEY);tourClose();T.rules=null;T.rulesApplied='';T.rulesPending=null;lockRules(false);T.st='idle';T.matches=[];T.loaded='';tnote('這個賽場已被其他主審接管');
         if(isHost&&oldRoom&&roomCode===oldRoom){try{broadcast({type:'roomClosed'})}catch(e){}leaveSync();clearHostRoom()}
         T.room='';renderTour();break;
       case 'closed':
@@ -1833,11 +1861,45 @@ syncStateFromInputs();
     if(!T.loaded)return;const m=T.matches.find(x=>x.rid===T.loaded);
     if(m&&m.p1&&m.p2&&msig(m)!==T.loadedSig)applyMatchPlayers(m);
   }
+  /* ----- 賽制（勝利條件）：由賽事管理決定，主審端套用並鎖定 ----- */
+  const RULE_IDS=['winScoreInput','mistakeLimitInput','mistakeSelfInput','mistakeOpponentInput','bestOfInput','bestOfFullChk','bestOfScoreChk'];
+  function ruleBusy(){return !!(!state.gameOver&&(state.blue||state.red||state.round||(state.matchLog&&state.matchLog.length)||countdownRunning))}
+  function ruleText(r){
+    const sg=n=>(n>0?'+':'')+n;let t;
+    if(r.mode==='series'){const need=Math.ceil(r.bestOf/2);t='系列賽 BEST OF '+r.bestOf+'：每局先到 '+r.winScore+' 分'+(r.scoreMode?'，累計總分高者勝':(r.full?'，打滿全部局數、勝場多者勝':'，先贏 '+need+' 局者勝'))}
+    else t='搶分賽：先到 '+r.winScore+' 分獲勝';
+    return t+(r.mistake.limit>0?'；失誤累積滿 '+r.mistake.limit+' 次：自己 '+sg(r.mistake.self)+' 分、對手 '+sg(r.mistake.opp)+' 分':'；不使用發射失誤規則');
+  }
+  function lockRules(on,text){
+    RULE_IDS.forEach(id=>{const e=$m(id);if(e)e.disabled=!!on});
+    const page=document.querySelector('#settingsOverlay .sp-match');let n=$m('tourRuleNote');
+    if(on){
+      if(!n&&page){n=document.createElement('div');n.id='tourRuleNote';n.style.cssText='margin:8px 0 12px;padding:10px 12px;border:1px solid #3d5f99;background:#14233a;border-radius:10px;font-size:13px;line-height:1.6;color:#cfe0ff';const h=page.querySelector('.sp-head');if(h&&h.nextSibling)page.insertBefore(n,h.nextSibling);else page.appendChild(n)}
+      if(n)n.textContent=text||'賽事模式：獲勝分數、系列賽與失誤規則由賽事管理設定，這裡不能修改。';
+    }else{
+      if(n)n.remove();
+      try{applySettingsToInputs(collectSettings())}catch(e){}   /* 重新計算「滿場」等連動欄位的可用狀態 */
+    }
+    T.rulesLocked=!!on;
+  }
+  function applyRules(r,force){
+    if(!r)return;
+    const sig=JSON.stringify(r);
+    if(!force&&sig===T.rulesApplied){lockRules(true,'賽事模式（賽制由賽事管理設定）：'+ruleText(r));return}
+    T.rulesPending=r;
+    if(!force&&ruleBusy()){lockRules(true,'賽事管理更新了賽制，這場結束後套用（目前沿用舊賽制）。新賽制：'+ruleText(r));return}
+    const v={winScoreInput:String(r.winScore),bestOfInput:String(r.bestOf||0),bestOfFullInput:r.full?'1':'0',bestOfScoreInput:r.scoreMode?'1':'0',mistakeLimitInput:String(r.mistake.limit),mistakeSelfInput:String(r.mistake.self),mistakeOpponentInput:String(r.mistake.opp)};
+    try{applySettingsToInputs(Object.assign(collectSettings(),v));persistSettings()}catch(e){}
+    T.rulesApplied=sig;T.rulesPending=null;
+    lockRules(true,'賽事模式（賽制由賽事管理設定）：'+ruleText(r));
+    try{broadcastState()}catch(e){}
+  }
   function tourLoad(rid,quiet){
     const m=T.matches.find(x=>x.rid===rid);if(!m||!m.p1||!m.p2)return false;
     const busy=!state.gameOver&&(state.blue||state.red||state.round||(state.matchLog&&state.matchLog.length));
     if(!quiet&&T.loaded&&T.loaded!==rid&&busy&&!confirm('目前這場還沒結束，確定要改載入 '+m.label+'？'))return false;
     const nb=$m('nextRoundBtn');if(nb)nb.click();
+    if(T.rules)applyRules(T.rules,true);
     state.matchWins={blue:0,red:0};state.matchLog=[];state.seriesWinner=null;state.lastWinTeam=null;
     T.loaded=rid;T.loadedSig='';applyMatchPlayers(m);tsave();
     try{render()}catch(e){}
@@ -1880,6 +1942,7 @@ syncStateFromInputs();
   }
   /* 回傳目前比賽狀態給賽事管理 */
   setInterval(()=>{
+    if(T.rulesPending&&!ruleBusy())applyRules(T.rulesPending,true);
     if(!tconnected()||!T.court)return;
     const phase=!T.loaded?'idle':(state.gameOver?'ended':((state.blue||state.red||state.round||countdownRunning)?'live':'prep'));
     const s={type:'status',n:T.court,rid:T.loaded,phase,blue:state.blue,red:state.red,round:state.round,mw:state.matchWins||null,sw:state.seriesWinner||null,win:state.winner||null,bn:state.blueName,rn:state.redName,devs:syncConnections.size,room:roomCode,ok:!!(isHost&&peer&&peer.open)};
@@ -1896,7 +1959,7 @@ syncStateFromInputs();
   $m('syncTourLeaveBtn').onclick=()=>tourLeave();
   $m('syncTourDone').onclick=()=>{if(isHost&&T.room&&roomCode===T.room)completeRole('host');else tnote('還沒選好賽場，請先連線並選擇賽場')};
   /* 重新開啟頁面：自動接回賽事（房間由 bootSync 還原，這裡只重連賽事管理） */
-  setTimeout(()=>{const sv=jget(TOUR_KEY);if(sv&&sv.code){T.court=sv.court||0;T.loaded=sv.loaded||'';T.code=sv.code;tourConnect(sv.code,{auto:true})}},1300);
+  setTimeout(()=>{const sv=jget(TOUR_KEY);if(sv&&sv.code){T.court=sv.court||0;T.loaded=sv.loaded||'';T.code=sv.code;lockRules(true);tourConnect(sv.code,{auto:true})}},1300);
 })();
 </script>
 
@@ -2989,7 +3052,8 @@ body.countdown-active #liveRecTimer,body.countdown-active #liveRecStop{visibilit
   function esc(t){return String(t).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
   setInterval(function(){
     var d=window.__bsDevices&&window.__bsDevices();
-    if(!d||!d.isHost){bar.style.display='none';return}
+    var so=$('syncOverlay');/* 還在同步設定視窗（尚未按「完成」進入主審房間）時不顯示 */
+    if(!d||!d.isHost||(so&&so.classList.contains('open'))){bar.style.display='none';return}
     var now=Date.now(),rows=[];
     if(d.serverDown)rows.push('<div class="ln"><i class="dot"></i>主控斷線中（連線伺服器中斷，重新連線中…）</div>');
     d.list.filter(function(x){return !x.connected&&now-x.since>10000}).forEach(function(x){rows.push('<div class="ln"><i class="dot"></i>'+esc(x.name)+' 已斷線 '+fmt(now-x.since)+'</div>')});
@@ -3323,6 +3387,7 @@ body:not(.live-role):not(.player-lock):not(.cam-room) .topbar{position:relative;
 body:not(.live-role):not(.player-lock):not(.cam-room) .topbar .title{display:none!important}
 body .camera-controls-clean #closeCameraBtn[data-hv-icon="1"]::after{content:"CAM OFF"!important}body .camera-controls-clean #closeCameraBtn[data-hv-icon="0"]::after{content:"CAM ON"!important}
 body.host-two:not(.live-role):not(.player-lock):not(.cam-room) #cameraLayer{opacity:.01!important;pointer-events:none!important;z-index:-1!important}
+body.host-two:not(.live-role):not(.player-lock):not(.cam-room) #closeCameraBtn{display:none!important}
 body.host-two:not(.live-role):not(.player-lock):not(.cam-room) #cameraControls,body.host-two:not(.live-role):not(.player-lock):not(.cam-room) #cameraStatus{display:none!important}
 </style>
 <script>
@@ -3343,6 +3408,8 @@ body.host-two:not(.live-role):not(.player-lock):not(.cam-room) #cameraControls,b
   function apply(){
     var m=mode();if(!m){B.classList.remove('host-two');return}
     var L=$('cameraLayer');B.classList.toggle('host-two',hv==='two');
+    /* 動畫模式下鏡頭處於「關閉」（例如從設定關閉、鏡頭中斷）時，一律回到「待機＋3D 背景」，不留空白畫面 */
+    if(m==='host'&&hv==='camera'&&typeof cameraState==='string'&&cameraState==='off'&&!(typeof cameraStream!=='undefined'&&cameraStream)){setCameraState('standby');return}
     var real=m==='clone'?hostCls:((typeof cameraState==='string'&&cameraState!=='off')?'camera-'+cameraState:'camera-off');
     CL.forEach(function(c){B.classList.remove(c)});
     if(hv==='two')B.classList.add('camera-off');else B.classList.add(real==='camera-off'?'camera-standby':real);
@@ -3364,12 +3431,14 @@ body.host-two:not(.live-role):not(.player-lock):not(.cam-room) #cameraControls,b
     cloneVideo:function(on){cloneCam=!!on;if(mode()==='clone')apply()}
   };
   /* 進出房間：同步房預設精簡；離開時還原 */
-  var was=null;
+  var was=mode();
   new MutationObserver(function(){var m=mode();
+    if(m==='host'&&was===null){hv='two'}
     if(m==='clone'&&was!=='clone'){hv='two';cloneCam=false;hostCls='camera-standby';apply()}
     if(m!=='clone'&&was==='clone'){var L=$('cameraLayer');if(L)L.classList.remove('active','placeholder');CL.forEach(function(c){B.classList.remove(c)});B.classList.add(typeof cameraState==='string'&&cameraState!=='off'?'camera-'+cameraState:'camera-off');hv='two';apply()}
     was=m}).observe(B,{attributes:true,attributeFilter:['class']});
   setInterval(function(){if(mode()==='host')camSync()},1000);
+  if(mode())B.classList.toggle('host-two',hv==='two');
   txt();
 })();
 </script>
